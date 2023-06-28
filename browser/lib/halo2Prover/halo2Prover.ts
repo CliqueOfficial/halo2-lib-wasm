@@ -24,7 +24,7 @@ export const generateProof = async (k: number) => {
     initThreadPool,
     prove,
     init_panic_hook,
-  } = await import(`./wasm${k}/halo2_ecc.js`);
+  } = await import(`./pkg/halo2_ecc.js`);
 
   console.log("number of threads", navigator.hardwareConcurrency);
 
@@ -47,7 +47,7 @@ export const generateProofPreloadedVK = async (k: number) => {
     initThreadPool,
     prove_vk,
     init_panic_hook,
-  } = await import(`./wasm${k}/halo2_ecc.js`);
+  } = await import(`./pkg/halo2_ecc.js`);
 
   console.log("number of threads", navigator.hardwareConcurrency);
 

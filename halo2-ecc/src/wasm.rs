@@ -9,16 +9,20 @@ use crate::secp256k1::ecdsa::ECDSACircuit;
 use crate::{
     halo2_proofs::{
         halo2curves::bn256::{Bn256, Fr, G1Affine},
+        halo2curves::secp256k1::Fq,
         plonk::*,
         transcript::{Blake2bWrite, Challenge255},
         SerdeFormat,
     },
     secp256k1::ecdsa::generate_ecdsa_input,
 };
-use halo2_base::{halo2_proofs::poly::commitment::Params, utils::PrimeField};
+use halo2_base::{halo2_proofs::{poly::commitment::Params, halo2curves::{pasta::pallas::Scalar, secp256k1::Secp256k1Affine, CurveAffine, FieldExt}}, utils::{PrimeField, biguint_to_fe}};
 
-use js_sys::Uint8Array;
-use std::io::BufReader;
+use js_sys::{Uint8Array, Math::log};
+use num_bigint::BigUint;
+use num_traits::FromPrimitive;
+use rand_core::OsRng;
+use std::{io::BufReader, char::from_u32};
 use std::marker::PhantomData;
 use wasm_bindgen::prelude::*;
 use web_sys;
@@ -54,6 +58,7 @@ pub fn prove(params_ser: JsValue) -> JsValue {
     let circuit = ECDSACircuit::<Fr>::default();
 
     web_sys::console::time_with_label("Generating verifying key");
+    log!("k, n of params: {}, {}", params.k(), params.n());
     let vk = keygen_vk(&params, &circuit).expect("keygen_vk should not fail");
     web_sys::console::time_end_with_label("Generating verifying key");
 
@@ -62,10 +67,18 @@ pub fn prove(params_ser: JsValue) -> JsValue {
     web_sys::console::time_end_with_label("Generating proving key");
 
     // inputs
-    let (r, s, msg_hash, pubkey, G) = generate_ecdsa_input();
+    // a field in github statstics
+    // next we can make it as slo1 || slot2 || ... || slot6 where one slot is 16-bit, and the whole 6 slots can
+    // be stored in one BN254 variable
+    let msg_hash = biguint_to_fe::<Fq>(&BigUint::from_u32(52u32).unwrap());
+    let lower = biguint_to_fe::<Fq>(&BigUint::from_u32(50u32).unwrap());
+    let upper = biguint_to_fe::<Fq>(&BigUint::from_u32(100u32).unwrap());
+    let (r, s, msg_hash, pubkey, G) = generate_ecdsa_input(msg_hash);
     let circuit = ECDSACircuit::<Fr> {
         r: Some(r),
         s: Some(s),
+        lower: Some(lower),
+        upper: Some(upper),
         msghash: Some(msg_hash),
         pk: Some(pubkey),
         G,
@@ -116,10 +129,15 @@ pub fn prove_vk(params_ser: JsValue, vk_ser: JsValue) -> JsValue {
     web_sys::console::time_end_with_label("Generating proving key");
 
     // inputs
-    let (r, s, msg_hash, pubkey, g) = generate_ecdsa_input();
+    let msg_hash = biguint_to_fe::<Fq>(&BigUint::from_u32(52u32).unwrap());
+    let lower = biguint_to_fe::<Fq>(&BigUint::from_u32(50u32).unwrap());
+    let upper = biguint_to_fe::<Fq>(&BigUint::from_u32(100u32).unwrap());
+    let (r, s, msg_hash, pubkey, g) = generate_ecdsa_input(msg_hash);
     let circuit = ECDSACircuit::<Fr> {
         r: Some(r),
         s: Some(s),
+        lower: Some(lower),
+        upper: Some(upper),
         msghash: Some(msg_hash),
         pk: Some(pubkey),
         G: g,

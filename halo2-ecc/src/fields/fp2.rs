@@ -307,6 +307,7 @@ where
         }
     }
 
+
     fn enforce_less_than<'v>(&self, ctx: &mut Context<'v, F>, a: &Self::FieldPoint<'v>) {
         for a_coeff in &a.coeffs {
             self.fp_chip.enforce_less_than(ctx, a_coeff)

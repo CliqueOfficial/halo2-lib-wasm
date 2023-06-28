@@ -117,6 +117,7 @@ fn bench_secp256k1_ecdsa() -> Result<(), Box<dyn std::error::Error>> {
                 .expect("Params file does not exist"),
         ))
         .unwrap();
+        println!("k, n of params: {}, {}", params.k(), params.n());
         let circuit = ECDSACircuit::<Fr>::default();
         end_timer!(params_time);
 

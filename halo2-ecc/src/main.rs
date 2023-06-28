@@ -8,7 +8,7 @@ use halo2_base::halo2_proofs::{
         kzg::commitment::ParamsKZG,
     },
 };
-use std::fs::File;
+use std::fs::{File, self};
 use std::io::BufReader;
 
 fn write_params(k: u32) {
@@ -24,7 +24,7 @@ fn write_params(k: u32) {
 }
 
 fn main() {
-    for k in 11..=19 {
+    for k in 15..=16 {
         write_params(k);
     }
 }

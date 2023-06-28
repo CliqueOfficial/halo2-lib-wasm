@@ -13,8 +13,10 @@ use crate::{
 };
 use halo2_base::utils::{biguint_to_fe, fe_to_biguint, modulus};
 use halo2_base::{utils::PrimeField, SKIP_FIRST_PASS};
+use halo2_base::gates::range::RangeConfig;
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
+use std::env::var;
 use std::marker::PhantomData;
 
 #[derive(Serialize, Deserialize)]
@@ -32,6 +34,8 @@ pub struct CircuitParams {
 pub struct ECDSACircuit<F> {
     pub r: Option<Fq>,
     pub s: Option<Fq>,
+    pub lower: Option<Fq>,
+    pub upper: Option<Fq>,
     pub msghash: Option<Fq>,
     pub pk: Option<Secp256k1Affine>,
     pub G: Secp256k1Affine,
@@ -42,6 +46,8 @@ impl<F: PrimeField> Default for ECDSACircuit<F> {
         Self {
             r: None,
             s: None,
+            lower: None,
+            upper: None,
             msghash: None,
             pk: None,
             G: Secp256k1Affine::generator(),
@@ -110,8 +116,11 @@ impl<F: PrimeField> Circuit<F> for ECDSACircuit<F> {
 
                 let mut aux = fp_chip.new_context(region);
                 let ctx = &mut aux;
+                // let lookup_bits =
+                //     var("LOOKUP_BITS").unwrap_or_else(|_| panic!("LOOKUP_BITS not set")).parse().unwrap();
+                // let range = RangeChip::default(lookup_bits);
 
-                let (r_assigned, s_assigned, m_assigned) = {
+                let (r_assigned, s_assigned, m_assigned, lower, upper) = {
                     let fq_chip = FpConfig::<F, Fq>::construct(
                         fp_chip.range.clone(),
                         limb_bits,
@@ -138,7 +147,19 @@ impl<F: PrimeField> Circuit<F> for ECDSACircuit<F> {
                             &self.s.map_or(Value::unknown(), Value::known),
                         ),
                     );
-                    (r_assigned, s_assigned, m_assigned)
+                    let lower = fq_chip.load_private(
+                        ctx,
+                        FpConfig::<F, Fq>::fe_to_witness(
+                            &self.lower.map_or(Value::unknown(), Value::known),
+                        ),
+                    );
+                    let upper = fq_chip.load_private(
+                        ctx,
+                        FpConfig::<F, Fq>::fe_to_witness(
+                            &self.upper.map_or(Value::unknown(), Value::known),
+                        ),
+                    );
+                    (r_assigned, s_assigned, m_assigned, lower, upper)
                 };
 
                 let ecc_chip = EccChip::<F, FpChip<F>>::construct(fp_chip.clone());
@@ -156,6 +177,8 @@ impl<F: PrimeField> Circuit<F> for ECDSACircuit<F> {
                     &pk_assigned,
                     &r_assigned,
                     &s_assigned,
+                    &lower,
+                    &upper,
                     &m_assigned,
                     4,
                     4,
@@ -164,6 +187,7 @@ impl<F: PrimeField> Circuit<F> for ECDSACircuit<F> {
                 // IMPORTANT: this copies cells to the lookup advice column to perform range check lookups
                 // This is not optional.
                 fp_chip.finalize(ctx);
+
 
                 #[cfg(feature = "display")]
                 if self.r.is_some() {
@@ -177,18 +201,20 @@ impl<F: PrimeField> Circuit<F> for ECDSACircuit<F> {
     }
 }
 
-pub fn generate_ecdsa_input() -> (Fq, Fq, Fq, Secp256k1Affine, Secp256k1Affine) {
+pub fn generate_ecdsa_input(msg_hash: Fq) -> (Fq, Fq, Fq, Secp256k1Affine, Secp256k1Affine) {
     let G = Secp256k1Affine::generator();
     let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
+    // shoule be stored in public io
     let pubkey = Secp256k1Affine::from(G * sk);
-    let msg_hash = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
 
+    // private key. it must be generated in Sibyl
     let k = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
     let k_inv = k.invert().unwrap();
 
     let r_point = Secp256k1Affine::from(G * k).coordinates().unwrap();
     let x = r_point.x();
     let x_bigint = fe_to_biguint(x);
+    // signature, shoule be generated in Sibyl
     let r = biguint_to_fe::<Fq>(&x_bigint);
     let s = k_inv * (msg_hash + (r * sk));
 

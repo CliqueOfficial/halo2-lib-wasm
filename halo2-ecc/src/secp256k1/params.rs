@@ -3,11 +3,11 @@ use crate::fields::fp::FpStrategy;
 
 pub const PARAMS: CircuitParams = CircuitParams {
     strategy: FpStrategy::Simple,
-    degree: 19,
-    num_advice: 1,
-    num_lookup_advice: 1,
+    degree: 15,
+    num_advice: 17,
+    num_lookup_advice: 3,
     num_fixed: 1,
-    lookup_bits: 18,
-    limb_bits: 88,
+    lookup_bits: 14,
+    limb_bits: 90,
     num_limbs: 3,
 };

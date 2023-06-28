@@ -4,8 +4,11 @@ use halo2_base::{
     gates::{GateInstructions, RangeInstructions},
     utils::{modulus, CurveAffineExt, PrimeField},
     AssignedValue, Context,
-    QuantumCell::Existing,
+    QuantumCell::{Constant, Existing},
 };
+use itertools::ConsTuples;
+use num_bigint::BigUint;
+use num_traits::FromPrimitive;
 
 use super::fixed_base;
 use super::{ec_add_unequal, scalar_multiply, EcPoint};
@@ -20,6 +23,8 @@ pub fn ecdsa_verify_no_pubkey_check<'v, F: PrimeField, CF: PrimeField, SF: Prime
     pubkey: &EcPoint<F, <FpConfig<F, CF> as FieldChip<F>>::FieldPoint<'v>>,
     r: &CRTInteger<'v, F>,
     s: &CRTInteger<'v, F>,
+    lower: &CRTInteger<'v, F>,
+    upper: &CRTInteger<'v, F>,
     msghash: &CRTInteger<'v, F>,
     var_window_bits: usize,
     fixed_window_bits: usize,
@@ -34,6 +39,18 @@ where
         modulus::<SF>(),
     );
     let n = scalar_chip.load_constant(ctx, scalar_chip.p.to_biguint().unwrap());
+
+    let range_bits = 64;
+    base_chip.range_check(ctx, msghash, range_bits);
+    base_chip.range_check(ctx, lower, range_bits);
+    base_chip.range_check(ctx, upper, range_bits);
+    let left = base_chip.range().is_less_than(ctx, Existing(lower.native()), Existing(msghash.native()), range_bits);
+    let right = base_chip.range().is_less_than(ctx, Existing(msghash.native()), Existing(upper.native()), range_bits);
+    let out_a = base_chip.gate().is_equal(ctx, Existing(&left), Constant(F::zero()));
+    let out_b = base_chip.gate().is_equal(ctx, Existing(&right), Constant(F::one()));
+    let out_ab = base_chip.gate().and(ctx, Existing(&out_a), Existing(&out_b));
+    let out = base_chip.gate().is_equal(ctx, Existing(&out_ab), Constant(F::one()));
+    base_chip.gate().assert_equal(ctx, Existing(&out), Constant(F::one()));
 
     // check r,s are in [1, n - 1]
     let r_valid = scalar_chip.is_soft_nonzero(ctx, r);
