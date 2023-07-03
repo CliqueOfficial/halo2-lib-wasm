@@ -40,11 +40,13 @@ where
     );
     let n = scalar_chip.load_constant(ctx, scalar_chip.p.to_biguint().unwrap());
 
-    let range_bits = 64;
+    let range_bits = 192;
     base_chip.range_check(ctx, msghash, range_bits);
     base_chip.range_check(ctx, lower, range_bits);
     base_chip.range_check(ctx, upper, range_bits);
-    let left = base_chip.range().is_less_than(ctx, Existing(lower.native()), Existing(msghash.native()), range_bits);
+    // x >= lower
+    let left = base_chip.range().is_less_than(ctx, Existing(msghash.native()), Existing(lower.native()), range_bits);
+    // x < upper
     let right = base_chip.range().is_less_than(ctx, Existing(msghash.native()), Existing(upper.native()), range_bits);
     let out_a = base_chip.gate().is_equal(ctx, Existing(&left), Constant(F::zero()));
     let out_b = base_chip.gate().is_equal(ctx, Existing(&right), Constant(F::one()));

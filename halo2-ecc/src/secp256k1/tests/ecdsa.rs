@@ -21,6 +21,9 @@ use crate::secp256k1::ecdsa::{CircuitParams, ECDSACircuit};
 #[cfg(test)]
 #[test]
 fn test_secp256k1_ecdsa() {
+    use num_bigint::BigUint;
+    use num_traits::FromPrimitive;
+
     let mut folder = std::path::PathBuf::new();
     folder.push("./src/secp256k1");
     folder.push("configs/ecdsa_circuit.config");
@@ -33,7 +36,8 @@ fn test_secp256k1_ecdsa() {
     let G = Secp256k1Affine::generator();
     let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
     let pubkey = Secp256k1Affine::from(G * sk);
-    let msg_hash = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
+    // let msg_hash = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
+    let msg_hash = biguint_to_fe::<Fq>(&BigUint::from_u32(52u32).unwrap());
 
     let k = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
     let k_inv = k.invert().unwrap();
@@ -47,6 +51,8 @@ fn test_secp256k1_ecdsa() {
     let circuit = ECDSACircuit::<Fr> {
         r: Some(r),
         s: Some(s),
+        lower: Some(biguint_to_fe::<Fq>(&BigUint::from_u32(50).unwrap())),
+        upper: Some(biguint_to_fe::<Fq>(&BigUint::from_u32(100).unwrap())),
         msghash: Some(msg_hash),
         pk: Some(pubkey),
         G,
@@ -61,6 +67,9 @@ fn test_secp256k1_ecdsa() {
 #[cfg(test)]
 #[test]
 fn bench_secp256k1_ecdsa() -> Result<(), Box<dyn std::error::Error>> {
+    use num_bigint::BigUint;
+    use num_traits::FromPrimitive;
+
     use crate::halo2_proofs::{
         poly::commitment::{Params, ParamsProver},
         poly::kzg::{
@@ -155,7 +164,8 @@ fn bench_secp256k1_ecdsa() -> Result<(), Box<dyn std::error::Error>> {
         let G = Secp256k1Affine::generator();
         let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
         let pubkey = Secp256k1Affine::from(G * sk);
-        let msg_hash = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
+        // let msg_hash = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
+        let msg_hash = biguint_to_fe::<Fq>(&BigUint::from_u32(52u32).unwrap());
 
         let k = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
         let k_inv = k.invert().unwrap();
@@ -169,6 +179,8 @@ fn bench_secp256k1_ecdsa() -> Result<(), Box<dyn std::error::Error>> {
         let proof_circuit = ECDSACircuit::<Fr> {
             r: Some(r),
             s: Some(s),
+            lower: Some(biguint_to_fe::<Fq>(&BigUint::from_u32(50).unwrap())),
+            upper: Some(biguint_to_fe::<Fq>(&BigUint::from_u32(100).unwrap())),
             msghash: Some(msg_hash),
             pk: Some(pubkey),
             G,

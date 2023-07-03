@@ -1,5 +1,17 @@
 # halo2-lib-wasm
 
+## Wasm Guide
+
+```bash
+cd halo2-ecc
+wasm-pack build --target web --out-dir pkg
+cp -rvf pkg ../browser/lib/halo2Prover/
+cargo run
+mv params*.bin ../browser/public
+cd ..
+yarn install && yarn dev
+```
+
 This forked version of axiom's halo2-lib is meant to benchmark their performance in-browser when converted to wasm. It heavily uses the [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) package and the [WASM guide](https://zcash.github.io/halo2/user/wasm-port.html) from Nalin.
 
 ## ECDSA setup
