@@ -25,7 +25,7 @@ pub fn ecdsa_verify_no_pubkey_check<'v, F: PrimeField, CF: PrimeField, SF: Prime
     s: &CRTInteger<'v, F>,
     lower: &CRTInteger<'v, F>,
     upper: &CRTInteger<'v, F>,
-    msghash: &CRTInteger<'v, F>,
+    target_value: &CRTInteger<'v, F>,
     var_window_bits: usize,
     fixed_window_bits: usize,
 ) -> AssignedValue<'v, F>
@@ -34,6 +34,7 @@ where
 {
     let scalar_chip = FpConfig::<F, SF>::construct(
         base_chip.range.clone(),
+        base_chip.instance.clone(),
         base_chip.limb_bits,
         base_chip.num_limbs,
         modulus::<SF>(),
@@ -41,13 +42,13 @@ where
     let n = scalar_chip.load_constant(ctx, scalar_chip.p.to_biguint().unwrap());
 
     let range_bits = 192;
-    base_chip.range_check(ctx, msghash, range_bits);
+    base_chip.range_check(ctx, target_value, range_bits);
     base_chip.range_check(ctx, lower, range_bits);
     base_chip.range_check(ctx, upper, range_bits);
     // x >= lower
-    let left = base_chip.range().is_less_than(ctx, Existing(msghash.native()), Existing(lower.native()), range_bits);
+    let left = base_chip.range().is_less_than(ctx, Existing(target_value.native()), Existing(lower.native()), range_bits);
     // x < upper
-    let right = base_chip.range().is_less_than(ctx, Existing(msghash.native()), Existing(upper.native()), range_bits);
+    let right = base_chip.range().is_less_than(ctx, Existing(target_value.native()), Existing(upper.native()), range_bits);
     let out_a = base_chip.gate().is_equal(ctx, Existing(&left), Constant(F::zero()));
     let out_b = base_chip.gate().is_equal(ctx, Existing(&right), Constant(F::one()));
     let out_ab = base_chip.gate().and(ctx, Existing(&out_a), Existing(&out_b));
@@ -59,7 +60,7 @@ where
     let s_valid = scalar_chip.is_soft_nonzero(ctx, s);
 
     // compute u1 = m s^{-1} mod n and u2 = r s^{-1} mod n
-    let u1 = scalar_chip.divide(ctx, msghash, s);
+    let u1 = scalar_chip.divide(ctx, target_value, s);
     let u2 = scalar_chip.divide(ctx, r, s);
 
     //let r_crt = scalar_chip.to_crt(ctx, r)?;

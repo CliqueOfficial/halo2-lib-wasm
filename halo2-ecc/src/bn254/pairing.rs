@@ -465,6 +465,7 @@ impl<'a, F: PrimeField> PairingChip<'a, F> {
     ) -> FpChip<F> {
         FpChip::<F>::configure(
             meta,
+            None,
             strategy,
             num_advice,
             num_lookup_advice,

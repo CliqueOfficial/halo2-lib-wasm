@@ -13,10 +13,8 @@ use crate::{
 };
 use halo2_base::utils::{biguint_to_fe, fe_to_biguint, modulus};
 use halo2_base::{utils::PrimeField, SKIP_FIRST_PASS};
-use halo2_base::gates::range::RangeConfig;
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
-use std::env::var;
 use std::marker::PhantomData;
 
 #[derive(Serialize, Deserialize)]
@@ -75,9 +73,12 @@ impl<F: PrimeField> Circuit<F> for ECDSACircuit<F> {
         // .unwrap();
 
         use super::params::PARAMS;
+        let instance = meta.instance_column();
+        meta.enable_equality(instance);
 
         FpChip::<F>::configure(
             meta,
+            Some(instance),
             PARAMS.strategy,
             &[PARAMS.num_advice],
             &[PARAMS.num_lookup_advice],
@@ -105,6 +106,12 @@ impl<F: PrimeField> Circuit<F> for ECDSACircuit<F> {
         let _num_advice = fp_chip.range.gate.num_advice;
 
         let mut first_pass = SKIP_FIRST_PASS;
+        let mut pk_x: Option<Cell> = None;
+        let mut pk_y: Option<Cell> = None;
+        // let mut r: Option<Cell> = None;
+        // let mut s: Option<Cell> = None;
+        let mut lower_cell: Option<Cell> = None;
+        let mut upper_cell: Option<Cell> = None;
         // ECDSA verify
         layouter.assign_region(
             || "ECDSA",
@@ -123,6 +130,7 @@ impl<F: PrimeField> Circuit<F> for ECDSACircuit<F> {
                 let (r_assigned, s_assigned, m_assigned, lower, upper) = {
                     let fq_chip = FpConfig::<F, Fq>::construct(
                         fp_chip.range.clone(),
+                        None,
                         limb_bits,
                         num_limbs,
                         modulus::<Fq>(),
@@ -170,6 +178,12 @@ impl<F: PrimeField> Circuit<F> for ECDSACircuit<F> {
                         self.pk.map_or(Value::unknown(), |pt| Value::known(pt.y)),
                     ),
                 );
+                pk_x = Some(pk_assigned.x.native().cell.cell().clone());
+                pk_y = Some(pk_assigned.y.native().cell.cell().clone());
+                // r = Some(r_assigned.native().cell.cell().clone());
+                // s = Some(s_assigned.native().cell.cell().clone());
+                lower_cell = Some(lower.native().cell.cell().clone());
+                upper_cell = Some(upper.native().cell.cell().clone());
                 // test ECDSA
                 let ecdsa = ecdsa_verify_no_pubkey_check::<F, Fp, Fq, Secp256k1Affine>(
                     &ecc_chip.field_chip,
@@ -188,7 +202,6 @@ impl<F: PrimeField> Circuit<F> for ECDSACircuit<F> {
                 // This is not optional.
                 fp_chip.finalize(ctx);
 
-
                 #[cfg(feature = "display")]
                 if self.r.is_some() {
                     println!("ECDSA res {ecdsa:?}");
@@ -197,11 +210,17 @@ impl<F: PrimeField> Circuit<F> for ECDSACircuit<F> {
                 }
                 Ok(())
             },
-        )
+        ).unwrap();
+        let mut public_io_layouter = layouter.namespace(|| "expose");
+        let public_io = vec![lower_cell.unwrap(), upper_cell.unwrap()];
+        for (i, cell) in public_io.iter().enumerate() {
+            public_io_layouter.constrain_instance(*cell, fp_chip.instance.unwrap(), i);
+        }
+        Ok(())
     }
 }
 
-pub fn generate_ecdsa_input(msg_hash: Fq) -> (Fq, Fq, Fq, Secp256k1Affine, Secp256k1Affine) {
+pub fn generate_ecdsa_input(target_value: Fq) -> (Fq, Fq, Fq, Secp256k1Affine, Secp256k1Affine) {
     let G = Secp256k1Affine::generator();
     let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
     // shoule be stored in public io
@@ -216,7 +235,7 @@ pub fn generate_ecdsa_input(msg_hash: Fq) -> (Fq, Fq, Fq, Secp256k1Affine, Secp2
     let x_bigint = fe_to_biguint(x);
     // signature, shoule be generated in Sibyl
     let r = biguint_to_fe::<Fq>(&x_bigint);
-    let s = k_inv * (msg_hash + (r * sk));
+    let s = k_inv * (target_value + (r * sk));
 
-    (r, s, msg_hash, pubkey, G)
+    (r, s, target_value, pubkey, G)
 }

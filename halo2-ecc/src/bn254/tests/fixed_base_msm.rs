@@ -48,6 +48,7 @@ impl<F: PrimeField> MSMConfig<F> {
     ) -> Self {
         let fp_chip = FpChip::<F>::configure(
             meta,
+            None,
             strategy,
             num_advice,
             num_lookup_advice,

@@ -39,6 +39,7 @@ impl<F: PrimeField> Circuit<F> for MyCircuit<F> {
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
         FpConfig::<F, _>::configure(
             meta,
+            None,
             FpStrategy::Simple,
             &[NUM_ADVICE],
             &[1],

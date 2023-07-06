@@ -21,6 +21,7 @@ use crate::secp256k1::ecdsa::{CircuitParams, ECDSACircuit};
 #[cfg(test)]
 #[test]
 fn test_secp256k1_ecdsa() {
+    use halo2_base::{utils::fs::gen_srs, halo2_proofs::{transcript::{TranscriptWriterBuffer, TranscriptReadBuffer}, poly::kzg::{commitment::KZGCommitmentScheme, multiopen::{ProverSHPLONK, VerifierSHPLONK}, strategy::SingleStrategy}, halo2curves::{serde::SerdeObject, secp256k1::Fp}}};
     use num_bigint::BigUint;
     use num_traits::FromPrimitive;
 
@@ -33,35 +34,74 @@ fn test_secp256k1_ecdsa() {
     let K = params.degree;
 
     // generate random pub key and sign random message
+    // NOTE (Wentao XIAO) G and pubkey is generated in Sibyl and should be exposed to client and stored in public IO
+    // G (base point) is always the same for secp256k1: (0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798,
+    // 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8)
     let G = Secp256k1Affine::generator();
+    // private key
     let sk = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
+    // TODO (Wentao XIAO) pubkey can be compressed
     let pubkey = Secp256k1Affine::from(G * sk);
     // let msg_hash = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
     let msg_hash = biguint_to_fe::<Fq>(&BigUint::from_u32(52u32).unwrap());
 
+    // NOTE (Wentao XIAO) k is the random number, should not be exposed to any party outside the Sibyl
     let k = <Secp256k1Affine as CurveAffine>::ScalarExt::random(OsRng);
     let k_inv = k.invert().unwrap();
 
+    // NOTE (Wentao XIAO) signature `s` and `r` are generated in Sibyl
     let r_point = Secp256k1Affine::from(G * k).coordinates().unwrap();
     let x = r_point.x();
     let x_bigint = fe_to_biguint(x);
     let r = biguint_to_fe::<Fq>(&(x_bigint % modulus::<Fq>()));
     let s = k_inv * (msg_hash + (r * sk));
 
+    println!("######## r s pubkey G: {:?} {:?} {:?} {:?}", r, s, pubkey, G);
+
+    let lower = 50;
+    let upper = 100;
     let circuit = ECDSACircuit::<Fr> {
         r: Some(r),
         s: Some(s),
-        lower: Some(biguint_to_fe::<Fq>(&BigUint::from_u32(50).unwrap())),
-        upper: Some(biguint_to_fe::<Fq>(&BigUint::from_u32(100).unwrap())),
+        lower: Some(biguint_to_fe::<Fq>(&BigUint::from_u32(lower).unwrap())),
+        upper: Some(biguint_to_fe::<Fq>(&BigUint::from_u32(upper).unwrap())),
         msghash: Some(msg_hash),
         pk: Some(pubkey),
         G,
         _marker: PhantomData,
     };
+    println!("public x: {:?}, y: {:?}", pubkey.x, pubkey.y);
+    let public_io = vec![
+        biguint_to_fe::<Fr>(&BigUint::from_u32(lower).unwrap()), biguint_to_fe::<Fr>(&BigUint::from_u32(upper).unwrap())];
+    println!("public io: {:?}", public_io);
 
-    let prover = MockProver::run(K, &circuit, vec![]).unwrap();
+    // let prover = MockProver::run(K, &circuit, vec![public_io]).unwrap();
     //prover.assert_satisfied();
-    assert_eq!(prover.verify(), Ok(()));
+    // assert_eq!(prover.verify(), Ok(()));
+
+    let params = gen_srs(K as u32);
+    let mut transcript: Blake2bWrite<Vec<u8>, G1Affine, Challenge255<G1Affine>> = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+    let vk = keygen_vk(&params, &circuit).expect("vk generation failed");
+    let pk = keygen_pk(&params, vk, &circuit).expect("pk generation failed");
+    create_proof::<
+        KZGCommitmentScheme<Bn256>,
+        ProverSHPLONK<'_, Bn256>,
+        Challenge255<G1Affine>,
+        _,
+        Blake2bWrite<Vec<u8>, G1Affine, Challenge255<G1Affine>>,
+        _,
+    >(&params, &pk, &[circuit], &[&[&public_io]], OsRng, &mut transcript)
+        .expect("proof generation failed");
+    let proof = transcript.finalize();
+    let strategy = SingleStrategy::new(&params);
+    let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+    verify_proof::<
+        KZGCommitmentScheme<Bn256>,
+        VerifierSHPLONK<'_, Bn256>,
+        Challenge255<G1Affine>,
+        Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>>,
+        SingleStrategy<'_, Bn256>,
+    >(&params, pk.get_vk(), strategy, &[&[&public_io]], &mut transcript).unwrap();
 }
 
 #[cfg(test)]

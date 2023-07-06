@@ -40,6 +40,7 @@ mod fp {
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
             FpConfig::<F, _>::configure(
                 meta,
+                None,
                 FpStrategy::Simple,
                 &[NUM_ADVICE],
                 &[1],
@@ -168,6 +169,7 @@ mod fp12 {
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
             FpConfig::<F, _>::configure(
                 meta,
+                None,
                 FpStrategy::Simple,
                 &[NUM_ADVICE],
                 &[1],

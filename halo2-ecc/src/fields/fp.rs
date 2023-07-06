@@ -9,6 +9,7 @@ use crate::halo2_proofs::{
     halo2curves::CurveAffine,
     plonk::{ConstraintSystem, Error},
 };
+use halo2_base::halo2_proofs::plonk::{Column, Instance};
 use halo2_base::{
     gates::{
         range::{RangeConfig, RangeStrategy},
@@ -37,6 +38,8 @@ pub type BaseFieldChip<C> = FpConfig<<C as CurveAffine>::ScalarExt, <C as CurveA
 #[derive(Clone, Debug)]
 pub struct FpConfig<F: PrimeField, Fp: PrimeField> {
     pub range: RangeConfig<F>,
+    pub instance: Option<Column<Instance>>,
+
     // pub bigint_chip: BigIntConfig<F>,
     pub limb_bits: usize,
     pub num_limbs: usize,
@@ -58,6 +61,7 @@ pub struct FpConfig<F: PrimeField, Fp: PrimeField> {
 impl<F: PrimeField, Fp: PrimeField> FpConfig<F, Fp> {
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
+        instance: Option<Column<Instance>>,
         strategy: FpStrategy,
         num_advice: &[usize],
         num_lookup_advice: &[usize],
@@ -82,12 +86,14 @@ impl<F: PrimeField, Fp: PrimeField> FpConfig<F, Fp> {
             gate_context_id,
             k,
         );
+        
 
-        Self::construct(range, limb_bits, num_limbs, p)
+        Self::construct(range, instance, limb_bits, num_limbs, p)
     }
 
     pub fn construct(
         range: RangeConfig<F>,
+        instance: Option<Column<Instance>>,
         // bigint_chip: BigIntConfig<F>,
         limb_bits: usize,
         num_limbs: usize,
@@ -107,6 +113,7 @@ impl<F: PrimeField, Fp: PrimeField> FpConfig<F, Fp> {
 
         FpConfig {
             range,
+            instance,
             // bigint_chip,
             limb_bits,
             num_limbs,
